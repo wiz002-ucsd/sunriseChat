@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import ChatInterface from './components/ChatInterface';
 import Header from './components/Header';
 import './App.css';
@@ -53,7 +53,15 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div 
+      className="app"
+      style={{
+        background: `
+          linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
+          url('/sean-oulashin-KMn4VEeEPR8-unsplash.jpg') center/cover no-repeat
+        `
+      }}
+    >
       <Header />
       <main className="main-content">
         <ChatInterface

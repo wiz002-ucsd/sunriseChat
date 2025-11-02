@@ -58,7 +58,7 @@ const ChatInterface = ({
                 <h3>Welcome to Sunrise Chat 🌅</h3>
                 <p>I'm here to listen and provide emotional support. Feel free to share what's on your mind - I'm here to help with empathy and understanding.</p>
                 <div className="safety-notice">
-                  <p><strong>Safety First:</strong> If you're having thoughts of self-harm, please reach out to a mental health professional or call 988 (Suicide & Crisis Lifeline).</p>
+                  <p><strong>Safety First:</strong> If you're having thoughts of self-harm, please reach out to a mental health professional or free call or text 1737 for support from a trained counsellor.</p>
                 </div>
               </div>
             </div>

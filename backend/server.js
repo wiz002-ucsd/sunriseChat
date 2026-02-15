@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const OpenAI = require('openai');
 const Joi = require('joi');
+const ragService = require('./services/ragService');
 require('dotenv').config();
 
 const app = express();
@@ -42,6 +43,12 @@ const messageSchema = Joi.object({
   ).max(50).optional().default([])
 });
 
+const documentSchema = Joi.object({
+  title: Joi.string().min(1).max(500).required(),
+  content: Joi.string().min(50).max(100000).required(),
+  metadata: Joi.object().optional().default({})
+});
+
 // Safety keywords and phrases to monitor
 const SAFETY_KEYWORDS = [
   'suicide', 'kill myself', 'end my life', 'self-harm', 'cut myself',
@@ -75,9 +82,9 @@ function checkMessageSafety(message) {
   };
 }
 
-// Function to generate empathetic system prompt
-function generateSystemPrompt() {
-  return `You are Sunrise Chat, a compassionate AI companion designed to provide emotional support and friendly conversation. 
+// Function to generate empathetic system prompt with RAG context
+function generateSystemPrompt(ragContext = '') {
+  let prompt = `You are Sunrise Chat, a compassionate AI companion designed to provide emotional support and friendly conversation. 
 
 User demographic: 12-17 years old, use youthful tone, language, and slang.
 Pretend you are also a teenager, and you are a friend of the user.
@@ -99,6 +106,12 @@ Important guidelines:
 - If conversations become concerning, acknowledge their pain while suggesting professional resources
 
 Remember: You're here to listen, support, and provide a safe space for emotional expression.`;
+
+  if (ragContext) {
+    prompt += `\n\nRelevant Information from Knowledge Base:\n${ragContext}\n\nWhen appropriate, you can reference this information to provide more informed and helpful responses. However, always maintain your empathetic and supportive tone.`;
+  }
+
+  return prompt;
 }
 
 // API Routes
@@ -140,8 +153,22 @@ Your life has value, and there are trained professionals who want to help you th
       });
     }
 
+    // Retrieve relevant context from knowledge base (RAG)
+    let ragContext = '';
+    try {
+      const relevantChunks = await ragService.retrieveRelevantChunks(message, 3, 0.7);
+      if (relevantChunks.length > 0) {
+        ragContext = relevantChunks.map((chunk, index) => {
+          return `[${index + 1}] From "${chunk.title}":\n${chunk.text}\n`;
+        }).join('\n');
+      }
+    } catch (error) {
+      console.error('Error retrieving RAG context:', error);
+      // Continue without RAG context if there's an error
+    }
+
     // Prepare conversation for OpenAI
-    const systemPrompt = generateSystemPrompt();
+    const systemPrompt = generateSystemPrompt(ragContext);
     const messages = [
       { role: 'system', content: systemPrompt },
       ...conversationHistory,
@@ -192,6 +219,83 @@ Your life has value, and there are trained professionals who want to help you th
     
     res.status(500).json({ 
       error: 'Something went wrong. Please try again.' 
+    });
+  }
+});
+
+// Document Management Endpoints
+
+// Add a new document to the knowledge base
+app.post('/api/documents', async (req, res) => {
+  try {
+    const { error, value } = documentSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        details: error.details[0].message
+      });
+    }
+
+    const { title, content, metadata } = value;
+
+    const result = await ragService.addDocument(title, content, metadata);
+
+    res.json({
+      success: true,
+      documentId: result.documentId,
+      chunks: result.chunks,
+      message: `Document "${title}" added successfully with ${result.chunks} chunks`
+    });
+  } catch (error) {
+    console.error('Error adding document:', error);
+    res.status(500).json({
+      error: 'Failed to add document',
+      details: error.message
+    });
+  }
+});
+
+// Get all documents
+app.get('/api/documents', async (req, res) => {
+  try {
+    const documents = await ragService.getAllDocuments();
+    res.json({
+      success: true,
+      documents: documents.map(doc => ({
+        id: doc.id,
+        title: doc.title,
+        metadata: doc.metadata,
+        createdAt: doc.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('Error retrieving documents:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve documents'
+    });
+  }
+});
+
+// Delete a document
+app.delete('/api/documents/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await ragService.deleteDocument(id);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Document deleted successfully'
+      });
+    } else {
+      res.status(404).json({
+        error: 'Document not found'
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    res.status(500).json({
+      error: 'Failed to delete document'
     });
   }
 });
